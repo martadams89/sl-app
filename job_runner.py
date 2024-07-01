@@ -15,6 +15,7 @@ from app.email_utils import (
     render,
 )
 from app.import_utils import handle_batch_import
+from app.jobs.event_jobs import send_alias_creation_events_for_user
 from app.jobs.export_user_data_job import ExportUserDataJob
 from app.log import LOG
 from app.models import User, Job, BatchImport, Mailbox, CustomDomain, JobState
@@ -197,13 +198,18 @@ def process_job(job: Job):
             onboarding_mailbox(user)
     elif job.name == config.JOB_ONBOARDING_4:
         user_id = job.payload.get("user_id")
-        user = User.get(user_id)
+        user: User = User.get(user_id)
 
         # user might delete their account in the meantime
         # or disable the notification
         if user and user.notification and user.activated:
-            LOG.d("send onboarding pgp email to user %s", user)
-            onboarding_pgp(user)
+            # if user only has 1 mailbox which is Proton then do not send PGP onboarding email
+            mailboxes = user.mailboxes()
+            if len(mailboxes) == 1 and mailboxes[0].is_proton():
+                LOG.d("Do not send onboarding PGP email to Proton mailbox")
+            else:
+                LOG.d("send onboarding pgp email to user %s", user)
+                onboarding_pgp(user)
 
     elif job.name == config.JOB_BATCH_IMPORT:
         batch_import_id = job.payload.get("batch_import_id")
@@ -264,8 +270,14 @@ SimpleLogin team.
         user_id = job.payload.get("user_id")
         user = User.get(user_id)
         if user and user.activated:
-            LOG.d("send proton welcome email to user %s", user)
+            LOG.d("Send proton welcome email to user %s", user)
             welcome_proton(user)
+    elif job.name == config.JOB_SEND_ALIAS_CREATION_EVENTS:
+        user_id = job.payload.get("user_id")
+        user = User.get(user_id)
+        if user and user.activated:
+            LOG.d(f"Sending alias creation events for {user}")
+            send_alias_creation_events_for_user(user)
     else:
         LOG.e("Unknown job name %s", job.name)
 
