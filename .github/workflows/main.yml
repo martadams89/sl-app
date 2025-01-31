@@ -7,6 +7,9 @@ on:
   #   - cron: '0 4 * * 0' # Sundays at 4am UTC
   workflow_dispatch: # on button
 
+env:
+  DOCKERHUB_REPO: martadams89/sl-app
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -131,7 +134,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v4
         with:
-          images: martadams89/sl-app
+          images: ${{ env.DOCKERHUB_REPO }}
 
       - name: Login to Docker Hub
         uses: docker/login-action@v2
@@ -261,7 +264,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v4
         with:
-          images: martadams89/sl-app-arm64
+          images: ${{ env.DOCKERHUB_REPO }}-arm64
 
       - name: Login to Docker Hub
         uses: docker/login-action@v2
