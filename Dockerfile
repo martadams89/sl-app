@@ -19,48 +19,23 @@ WORKDIR /code
 COPY pyproject.toml uv.lock .python-version ./
 
 # Install deps
-RUN \
-    echo "**** install build packages ****" && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends \
-        curl \
-        netcat-traditional \
-        gcc \
-        python3-dev \
-        gnupg \
-        git \
-        libre2-dev \
-        build-essential \
-        pkg-config \
-        cmake \
-        ninja-build \
-        bash \
-        clang \
-        ca-certificates && \
-    curl -o /tmp/uv-installer.sh -L https://astral.sh/uv/install.sh && \
-    sh /tmp/uv-installer.sh && \
-    export PATH="$HOME/.local/bin:$PATH" && \
-    export CMAKE_POLICY_VERSION_MINIMUM=3.5 && \
-    uv python install `cat .python-version` && \
-    uv sync --no-dev --no-cache && \
-    echo "**** install runtime packages ****" && \
-    apt-get install -y \
-        gnupg \
-        libre2-10 && \
-    echo "**** cleanup ****" && \
-    apt-get purge -y \
-        curl \
-        netcat-traditional \
-        build-essential \
-        pkg-config \
-        cmake \
-        ninja-build \
-        python3-dev \
-        clang && \
-    apt-get autoremove -y && \
-    apt-get autoclean -y && \
-    rm -rf \
-        /var/lib/apt/lists/*
+RUN apt-get update \
+    && apt-get install -y curl netcat-traditional gcc python3-dev gnupg git libre2-dev build-essential pkg-config cmake ninja-build bash clang \
+    && curl -sSL "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" > uv.tar.gz \
+    && echo "${UV_HASH}  uv.tar.gz" | sha256sum -c - \
+    && tar xf uv.tar.gz -C /tmp/ \
+    && mv /tmp/uv-x86_64-unknown-linux-gnu/uv /usr/bin/uv \
+    && mv /tmp/uv-x86_64-unknown-linux-gnu/uvx /usr/bin/uvx \
+    && rm -rf /tmp/uv* \
+    && rm -f uv.tar.gz \
+    && uv python install `cat .python-version` \
+    && export CMAKE_POLICY_VERSION_MINIMUM=3.5 \
+    && uv sync --locked \
+    && apt-get autoremove -y \
+    && apt-get purge -y curl netcat-traditional build-essential pkg-config cmake ninja-build python3-dev clang\
+    && apt-get autoremove -y \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy code
 COPY . .
