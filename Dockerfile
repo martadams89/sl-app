@@ -40,6 +40,7 @@ RUN \
     curl -o /tmp/uv-installer.sh -L https://astral.sh/uv/install.sh && \
     sh /tmp/uv-installer.sh && \
     export PATH="$HOME/.local/bin:$PATH" && \
+    export CMAKE_POLICY_VERSION_MINIMUM=3.5 && \
     uv python install `cat .python-version` && \
     uv sync --no-dev --no-cache && \
     echo "**** install runtime packages ****" && \
