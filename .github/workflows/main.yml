@@ -9,8 +9,6 @@ on:
 
 env:
   DOCKERHUB_REPO: martadams89/sl-app
-
-env:
   CMAKE_POLICY_VERSION_MINIMUM: 3.5
 
 jobs:
