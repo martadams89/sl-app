@@ -13,8 +13,6 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # Turns off buffering for easier container logging
 ENV PYTHONUNBUFFERED=1
 
-ENV CMAKE_POLICY_VERSION_MINIMUM: 3.5
-
 WORKDIR /code
 
 # Copy dependency files
@@ -43,6 +41,7 @@ RUN \
     sh /tmp/uv-installer.sh && \
     export PATH="$HOME/.local/bin:$PATH" && \
     uv python install `cat .python-version` && \
+    export CMAKE_POLICY_VERSION_MINIMUM=3.5 &&\
     uv sync --no-dev --no-cache && \
     echo "**** install runtime packages ****" && \
     apt-get install -y \
