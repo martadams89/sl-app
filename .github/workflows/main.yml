@@ -10,6 +10,7 @@ on:
 env:
   DOCKERHUB_REPO: martadams89/sl-app
   CMAKE_POLICY_VERSION_MINIMUM: 3.5
+  UV_VERSION: 0.7.13
 
 jobs:
   lint:
@@ -22,7 +23,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           # Install a specific version of uv.
-          version: "0.5.21"
+          version: ${{ env.UV_VERSION }}
           enable-cache: true
 
       - name: Install OS dependencies
@@ -75,7 +76,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           # Install a specific version of uv.
-          version: "0.5.21"
+          version: ${{ env.UV_VERSION }}
           enable-cache: true
 
       - name: Install OS dependencies
