@@ -1,8 +1,8 @@
 name: Sync Fork and Auto-merge with tgymnich/fork-sync
 
 on:
-  #schedule:
-  #  - cron: "*/30 * * * *" # Every 30 minutes
+  schedule:
+    - cron: "*/30 * * * *" # Every 30 minutes
   workflow_dispatch: # Allow manual triggering
 
 jobs:
