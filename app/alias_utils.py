@@ -530,13 +530,17 @@ def change_alias_note(alias: Alias, note: str, commit: bool = False):
     LOG.i(f"Changing alias {alias} note.")
 
     alias.note = note
-    event = AliasNoteChanged(
-        id=alias.id,
-        email=alias.email,
-        note=note,
-    )
+    # TODO: acasajus Enable back after July 1st 2025
+    if False:
+        event = AliasNoteChanged(
+            id=alias.id,
+            email=alias.email,
+            note=note,
+        )
 
-    EventDispatcher.send_event(alias.user, EventContent(alias_note_changed=event))
+        EventDispatcher.send_event(alias.user, EventContent(alias_note_changed=event))
+    else:
+        LOG.i("Skipping sending event for now")
 
     if commit:
         Session.commit()
