@@ -242,6 +242,8 @@ class AuditLogActionEnum(EnumE):
     stop_trial = 11
     unlink_user = 12
     delete_custom_domain = 13
+    clear_delete_on = 14
+    update_subdomain_quota = 15
 
 
 class Phase(EnumE):
@@ -3816,6 +3818,28 @@ class AdminAuditLog(Base):
             model="User",
             model_id=user_id,
             data={},
+        )
+
+    @classmethod
+    def clear_delete_on(cls, admin_user_id: int, user_id: int):
+        cls.create(
+            admin_user_id=admin_user_id,
+            action=AuditLogActionEnum.clear_delete_on.value,
+            model="User",
+            model_id=user_id,
+            data={},
+        )
+
+    @classmethod
+    def update_subdomain_quota(
+        cls, admin_user_id: int, user_id: int, old_quota: int, new_quota: int
+    ):
+        cls.create(
+            admin_user_id=admin_user_id,
+            action=AuditLogActionEnum.update_subdomain_quota.value,
+            model="User",
+            model_id=user_id,
+            data={"old_quota": old_quota, "new_quota": new_quota},
         )
 
 
