@@ -1872,9 +1872,8 @@ def handle_transactional_bounce(
 ):
     LOG.d("handle transactional bounce sent to %s", rcpt_to)
     if transactional_id is None:
-        LOG.i(
-            f"No transactional record for {envelope.mail_from} -> {envelope.rcpt_tos}"
-        )
+        LOG.i(f"No transactional id for {envelope.mail_from} -> {envelope.rcpt_tos}")
+        save_envelope_for_debugging(envelope, "no-txid")
         return
 
     transactional = TransactionalEmail.get(transactional_id)
@@ -1883,7 +1882,9 @@ def handle_transactional_bounce(
         LOG.i(
             f"No transactional record for {envelope.mail_from} -> {envelope.rcpt_tos}"
         )
+        save_envelope_for_debugging(envelope, "no-tx")
         return
+
     LOG.i("Create bounce for %s", transactional.email)
     bounce_info = get_mailbox_bounce_info(msg)
     if bounce_info:
