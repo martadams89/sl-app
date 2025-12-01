@@ -14,6 +14,7 @@ from app.dashboard.views.enter_sudo import sudo_required
 from app.db import Session
 from app.log import LOG
 from app.models import Fido, RecoveryCode
+from app.user_settings import regenerate_user_alternative_id
 
 
 class FidoTokenForm(FlaskForm):
@@ -71,6 +72,7 @@ def fido_setup():
             name=fido_token_form.key_name.data,
             user_id=current_user.id,
         )
+        regenerate_user_alternative_id(current_user)
         Session.commit()
 
         LOG.d(
