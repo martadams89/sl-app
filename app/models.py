@@ -245,6 +245,9 @@ class AuditLogActionEnum(EnumE):
     clear_delete_on = 14
     update_subdomain_quota = 15
     update_directory_quota = 16
+    disable_mailbox = 17
+    enable_mailbox = 18
+    change_default_mailbox = 19
 
 
 class Phase(EnumE):
@@ -2944,6 +2947,10 @@ class Mailbox(Base, ModelMixin):
     # a mailbox can be disabled if it can't be reached
     disabled = sa.Column(sa.Boolean, default=False, nullable=False, server_default="0")
 
+    # Bitmask flags for admin-controlled states
+    FLAG_ADMIN_DISABLED = 1 << 0
+    flags = sa.Column(sa.BigInteger(), default=0, server_default="0", nullable=False)
+
     generic_subject = sa.Column(sa.String(78), nullable=True)
 
     __table_args__ = (
@@ -2965,6 +2972,10 @@ class Mailbox(Base, ModelMixin):
             return True
 
         return False
+
+    def is_admin_disabled(self) -> bool:
+        """Check if mailbox has been disabled by admin."""
+        return self.flags & Mailbox.FLAG_ADMIN_DISABLED == Mailbox.FLAG_ADMIN_DISABLED
 
     def nb_alias(self):
         from app.mailbox_utils import count_mailbox_aliases
