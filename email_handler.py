@@ -52,6 +52,7 @@ from aiosmtpd.smtp import Envelope
 from email_validator import validate_email, EmailNotValidError
 from flanker.addresslib import address
 from flanker.addresslib.address import EmailAddress
+from sl_pgp import PgpContext
 from sqlalchemy.exc import IntegrityError
 
 from app import pgp_utils, s3, config, contact_utils
@@ -153,7 +154,10 @@ from app.handler.unsubscribe_generator import UnsubscribeGenerator
 from app.handler.unsubscribe_handler import UnsubscribeHandler
 from app.log import LOG, set_message_id
 from app.mail_sender import sl_sendmail
-from app.mailbox_utils import get_mailbox_for_reply_phase
+from app.mailbox_utils import (
+    get_mailbox_for_reply_phase,
+    quarantine_disabled_mailbox_email,
+)
 from app.message_utils import message_to_bytes
 from app.models import (
     Alias,
@@ -179,12 +183,9 @@ from app.pgp_utils import (
     load_public_key_and_check,
     create_pgp_context,
 )
-
-
 from app.utils import sanitize_email
 from init_app import load_pgp_public_keys
 from server import create_light_app
-from sl_pgp import PgpContext
 
 
 @sentry_sdk.trace
@@ -769,6 +770,7 @@ def forward_email_to_mailbox(
 
     if mailbox.is_admin_disabled():
         LOG.d(f"{mailbox} admin_disabled, do not forward")
+        quarantine_disabled_mailbox_email(alias, contact, mailbox, envelope, msg)
         return True, status.E207
 
     # sanity check: make sure mailbox is not actually an alias
@@ -1124,6 +1126,10 @@ def handle_reply(envelope, msg: Message, rcpt_to: str) -> (bool, str):
             # return 2** to avoid Postfix sending out bounces and avoid backscatter issue
             return False, status.E214
 
+    if mailbox.is_admin_disabled():
+        LOG.i(f"User {user} tried to send a mail from admin disabled mailbox {mailbox}")
+        return False, status.E207
+
     if ENFORCE_SPF and mailbox.force_spf and not alias.disable_email_spoofing_check:
         if not spf_pass(envelope, mailbox, user, alias, contact.website_email, msg):
             # cannot use 4** here as sender will retry.
@@ -1276,17 +1282,18 @@ def handle_reply(envelope, msg: Message, rcpt_to: str) -> (bool, str):
         # the email is ignored, delete the email log
         EmailLog.delete(email_log.id, commit=True)
 
-        send_email(
-            mailbox.email,
-            f"Email sent to {contact.email} contains non reverse-alias addresses",
-            render(
-                "transactional/non-reverse-alias-reply-phase.txt.jinja2",
-                user=alias.user,
-                destination=contact.email,
-                alias=alias.email,
-                subject=msg[headers.SUBJECT],
-            ),
-        )
+        if mailbox.can_send_or_receive():
+            send_email(
+                mailbox.email,
+                f"Email sent to {contact.email} contains non reverse-alias addresses",
+                render(
+                    "transactional/non-reverse-alias-reply-phase.txt.jinja2",
+                    user=alias.user,
+                    destination=contact.email,
+                    alias=alias.email,
+                    subject=msg[headers.SUBJECT],
+                ),
+            )
         # user is informed and will retry
         return True, status.E200
 
@@ -1329,24 +1336,25 @@ def handle_reply(envelope, msg: Message, rcpt_to: str) -> (bool, str):
     except Exception:
         LOG.w("Cannot send email from %s to %s", alias, contact)
         EmailLog.delete(email_log.id, commit=True)
-        send_email(
-            mailbox.email,
-            f"Email cannot be sent to {contact.email} from {alias.email}",
-            render(
-                "transactional/reply-error.txt.jinja2",
-                user=user,
-                alias=alias,
-                contact=contact,
-                contact_domain=get_email_domain_part(contact.email),
-            ),
-            render(
-                "transactional/reply-error.html",
-                user=user,
-                alias=alias,
-                contact=contact,
-                contact_domain=get_email_domain_part(contact.email),
-            ),
-        )
+        if mailbox.can_send_or_receive():
+            send_email(
+                mailbox.email,
+                f"Email cannot be sent to {contact.email} from {alias.email}",
+                render(
+                    "transactional/reply-error.txt.jinja2",
+                    user=user,
+                    alias=alias,
+                    contact=contact,
+                    contact_domain=get_email_domain_part(contact.email),
+                ),
+                render(
+                    "transactional/reply-error.html",
+                    user=user,
+                    alias=alias,
+                    contact=contact,
+                    contact_domain=get_email_domain_part(contact.email),
+                ),
+            )
 
     # return 250 even if error as user is already informed of the incident and can retry sending the email
     return True, status.E200
