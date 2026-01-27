@@ -33,6 +33,7 @@ from app.proton.proton_unlink import perform_proton_account_unlink
 class EmailSearchResult:
     SEARCH_TYPE_ALIAS = "alias"
     SEARCH_TYPE_EMAIL = "email"
+    SEARCH_TYPE_PARTNER = "partner"
 
     def __init__(self):
         self.no_match: bool = True
@@ -243,10 +244,50 @@ class EmailSearchResult:
         return output
 
     @staticmethod
+    def search_partner(query: str) -> EmailSearchResult:
+        """Search for partner users by email or external user ID.
+
+        If the query contains '@', searches by partner_email.
+        Otherwise, searches by external_user_id.
+        """
+        output = EmailSearchResult()
+        output.query = query
+        output.search_type = EmailSearchResult.SEARCH_TYPE_PARTNER
+
+        try:
+            proton_partner = get_proton_partner()
+        except ProtonPartnerNotSetUp:
+            # Proton partner not configured, return empty results
+            return output
+
+        if "@" in query:
+            # Search by partner_email
+            partner_user = PartnerUser.filter_by(
+                partner_id=proton_partner.id, partner_email=query
+            ).first()
+            if partner_user:
+                output.partner_users = [partner_user]
+                output.partner_users_found_by_regex = False
+                output.no_match = False
+        else:
+            # Search by external_user_id
+            partner_users = PartnerUser.filter_by(
+                partner_id=proton_partner.id, external_user_id=query
+            ).all()
+            if partner_users:
+                output.partner_users = partner_users
+                output.partner_users_found_by_regex = False
+                output.no_match = False
+
+        return output
+
+    @staticmethod
     def from_request(query: str, search_type: str) -> EmailSearchResult:
         """Main entry point for searching based on search type."""
         if search_type == EmailSearchResult.SEARCH_TYPE_ALIAS:
             return EmailSearchResult.search_aliases(query)
+        elif search_type == EmailSearchResult.SEARCH_TYPE_PARTNER:
+            return EmailSearchResult.search_partner(query)
         else:
             return EmailSearchResult.search_emails(query)
 
@@ -852,7 +893,16 @@ class EmailSearchAdmin(BaseView):
             flash("Mailbox not found", "error")
             return redirect(url_for("admin.email_search.index"))
 
-        send_admin_disable_mailbox_warning_email(mailbox)
+        note = request.form.get("note", "").strip()
+        if not note:
+            flash("Note is required", "error")
+            return redirect(
+                url_for(
+                    "admin.email_search.index", query=mailbox.email, search_type="email"
+                )
+            )
+
+        send_admin_disable_mailbox_warning_email(mailbox, reason=note)
 
         flash(f"Warning email sent to {mailbox.email}", "success")
         LOG.info(
