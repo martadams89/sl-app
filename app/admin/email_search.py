@@ -25,6 +25,8 @@ from app.models import (
     AuditLogActionEnum,
     AbuserAuditLog,
     CustomDomain,
+    Contact,
+    EmailLog,
 )
 from app.proton.proton_partner import get_proton_partner
 from app.proton.proton_unlink import perform_proton_account_unlink
@@ -293,13 +295,27 @@ class EmailSearchResult:
 
 
 class EmailSearchHelpers:
+    PAGE_SIZE = 50
+
     @staticmethod
-    def mailbox_list(user: User, ensure_mailbox_id: int | None = None) -> list[Mailbox]:
-        """Get first 10 mailboxes for user, ensuring a specific mailbox is included if provided."""
+    def mailbox_list(
+        user: User,
+        ensure_mailbox_id: int | None = None,
+        page: int = 1,
+    ) -> list[Mailbox]:
+        """Get mailboxes for user with pagination (50 per page).
+
+        Args:
+            user: The user to get mailboxes for
+            ensure_mailbox_id: If provided, ensure this mailbox is included in results
+            page: Page number (1-indexed)
+        """
+        offset = (page - 1) * EmailSearchHelpers.PAGE_SIZE
         mailboxes = (
             Mailbox.filter_by(user_id=user.id)
             .order_by(Mailbox.id.asc())
-            .limit(10)
+            .offset(offset)
+            .limit(EmailSearchHelpers.PAGE_SIZE)
             .all()
         )
         # If a specific mailbox should be included and it's not in the list, add it
@@ -313,7 +329,15 @@ class EmailSearchHelpers:
 
     @staticmethod
     def mailbox_count(user: User) -> int:
-        return Mailbox.filter_by(user_id=user.id).order_by(Mailbox.id.desc()).count()
+        return Mailbox.filter_by(user_id=user.id).count()
+
+    @staticmethod
+    def mailbox_total_pages(user: User) -> int:
+        """Get total number of pages for mailboxes."""
+        count = EmailSearchHelpers.mailbox_count(user)
+        return (
+            count + EmailSearchHelpers.PAGE_SIZE - 1
+        ) // EmailSearchHelpers.PAGE_SIZE
 
     @staticmethod
     def alias_mailboxes(alias: Alias) -> list[Mailbox]:
@@ -335,14 +359,33 @@ class EmailSearchHelpers:
         return len(alias.mailboxes)
 
     @staticmethod
-    def alias_list(user: User) -> list[Alias]:
+    def alias_list(user: User, page: int = 1) -> list[Alias]:
+        """Get aliases for user with pagination (50 per page).
+
+        Args:
+            user: The user to get aliases for
+            page: Page number (1-indexed)
+        """
+        offset = (page - 1) * EmailSearchHelpers.PAGE_SIZE
         return (
-            Alias.filter_by(user_id=user.id).order_by(Alias.id.desc()).limit(10).all()
+            Alias.filter_by(user_id=user.id)
+            .order_by(Alias.id.desc())
+            .offset(offset)
+            .limit(EmailSearchHelpers.PAGE_SIZE)
+            .all()
         )
 
     @staticmethod
     def alias_count(user: User) -> int:
         return Alias.filter_by(user_id=user.id).count()
+
+    @staticmethod
+    def alias_total_pages(user: User) -> int:
+        """Get total number of pages for aliases."""
+        count = EmailSearchHelpers.alias_count(user)
+        return (
+            count + EmailSearchHelpers.PAGE_SIZE - 1
+        ) // EmailSearchHelpers.PAGE_SIZE
 
     @staticmethod
     def partner_user(user: User) -> Optional[PartnerUser]:
@@ -436,6 +479,36 @@ class EmailSearchHelpers:
         return result
 
     @staticmethod
+    def mailbox_flags(mailbox: Mailbox) -> list[str]:
+        """Decode mailbox flags into human-readable list."""
+        flags = mailbox.flags or 0
+        result = []
+        if flags & Mailbox.FLAG_ADMIN_DISABLED:
+            result.append("ADMIN_DISABLED")
+        return result
+
+    @staticmethod
+    def alias_contact_count(alias: Alias) -> int:
+        """Get count of contacts for an alias."""
+        return Contact.filter(Contact.alias_id == alias.id).count()
+
+    @staticmethod
+    def alias_email_received_count(alias: Alias) -> int:
+        """Get count of emails received (forwarded) for an alias."""
+        return EmailLog.filter(
+            EmailLog.alias_id == alias.id,
+            EmailLog.is_reply == False,  # noqa: E712
+        ).count()
+
+    @staticmethod
+    def alias_email_sent_count(alias: Alias) -> int:
+        """Get count of emails sent (replies) from an alias."""
+        return EmailLog.filter(
+            EmailLog.alias_id == alias.id,
+            EmailLog.is_reply == True,  # noqa: E712
+        ).count()
+
+    @staticmethod
     def custom_domain_list(user: User) -> list[CustomDomain]:
         """Get list of custom domains for a user."""
         # user.custom_domains is a backref relationship (InstrumentedList)
@@ -503,6 +576,17 @@ class EmailSearchAdmin(BaseView):
             query = query.strip()
             search = EmailSearchResult.from_request(query, search_type)
 
+        # Pagination parameters
+        try:
+            mailbox_page = max(1, int(request.args.get("mailbox_page", 1)))
+        except (ValueError, TypeError):
+            mailbox_page = 1
+
+        try:
+            alias_page = max(1, int(request.args.get("alias_page", 1)))
+        except (ValueError, TypeError):
+            alias_page = 1
+
         return self.render(
             "admin/email_search.html",
             query=query,
@@ -510,6 +594,9 @@ class EmailSearchAdmin(BaseView):
             data=search,
             helper=EmailSearchHelpers,
             now=arrow.now(),
+            mailbox_page=mailbox_page,
+            alias_page=alias_page,
+            page_size=EmailSearchHelpers.PAGE_SIZE,
         )
 
     @expose("/partner_unlink", methods=["POST"])
