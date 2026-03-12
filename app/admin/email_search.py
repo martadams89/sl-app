@@ -4,10 +4,11 @@ from typing import Optional, List
 
 import arrow
 from flask import redirect, url_for, request, flash
-from flask_admin import BaseView, expose
+from flask_admin import expose
 from flask_login import current_user
 from sqlalchemy.orm import joinedload
 
+from app.admin.base import BaseAdminView
 from app.db import Session
 from app.errors import ProtonPartnerNotSetUp
 from app.log import LOG
@@ -636,15 +637,7 @@ class EmailSearchHelpers:
         return None
 
 
-class EmailSearchAdmin(BaseView):
-    def is_accessible(self):
-        return current_user.is_authenticated and current_user.is_admin
-
-    def inaccessible_callback(self, name, **kwargs):
-        # redirect to login page if user doesn't have access
-        flash("You don't have access to the admin page", "error")
-        return redirect(url_for("dashboard.index", next=request.url))
-
+class EmailSearchAdmin(BaseAdminView):
     @expose("/", methods=["GET", "POST"])
     def index(self):
         search = EmailSearchResult()
