@@ -34,7 +34,11 @@ from app.models import (
 )
 from app.alias_audit_log_utils import emit_alias_audit_log, AliasAuditLogAction
 from app.alias_delete import delete_alias as perform_alias_delete
-from app.user_audit_log_utils import emit_user_audit_log, UserAuditLogAction
+from app.user_audit_log_utils import (
+    emit_user_audit_log,
+    emit_user_deleted_audit_log,
+    UserAuditLogAction,
+)
 from app.proton.proton_partner import get_proton_partner
 from app.proton.proton_unlink import perform_proton_account_unlink
 from app.regex_utils import is_safe_regex_pattern
@@ -148,6 +152,7 @@ class EmailSearchResult:
 
         # Search users by exact match (id or email)
         user = None
+        user_id = None
         try:
             user_id = int(query)
             user = User.get(user_id)
@@ -195,11 +200,14 @@ class EmailSearchResult:
             # Proton partner not configured, skip this search
             pass
 
-        # Check user audit log by user_email if no users found
+        # Check user audit log if no users found (e.g. the user has been deleted)
         if not output.users:
+            if user_id is not None:
+                audit_log_query = UserAuditLog.filter_by(user_id=user_id)
+            else:
+                audit_log_query = UserAuditLog.filter_by(user_email=query)
             user_audit_log = (
-                UserAuditLog.filter_by(user_email=query)
-                .order_by(UserAuditLog.created_at.desc())
+                audit_log_query.order_by(UserAuditLog.created_at.desc())
                 .limit(EmailSearchHelpers.UNPAGINATED_QUERY_LIMIT)
                 .all()
             )
@@ -1051,6 +1059,7 @@ class EmailSearchAdmin(BaseAdminView):
     def delete_user(self):
         user_id = request.form.get("user_id")
         confirm_email = request.form.get("confirm_email", "").strip()
+        reason = request.form.get("reason", "").strip()
 
         if not user_id:
             flash("Missing user_id", "error")
@@ -1066,6 +1075,10 @@ class EmailSearchAdmin(BaseAdminView):
         if user is None:
             flash("User not found", "error")
             return redirect(url_for("admin.email_search.index", query=user_id))
+
+        if not reason:
+            flash("A reason is required to delete a user", "error")
+            return redirect(url_for("admin.email_search.index", query=user.email))
 
         # Verify email confirmation matches
         if confirm_email != user.email:
@@ -1088,7 +1101,16 @@ class EmailSearchAdmin(BaseAdminView):
             model="User",
             model_id=user.id,
             action=AuditLogActionEnum.delete_object.value,
-            data={"email": user_email, "deleted_by": current_user.email},
+            data={
+                "email": user_email,
+                "deleted_by": current_user.email,
+                "reason": reason,
+            },
+        )
+        emit_user_deleted_audit_log(
+            user=user,
+            deleted_by=f"admin {current_user.id} ({current_user.email})",
+            reason=reason,
         )
         Session.commit()
 
