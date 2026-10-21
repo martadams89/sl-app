@@ -31,7 +31,11 @@ from app.log import LOG
 from app.mailbox_utils import MailboxError, ensure_mailbox_assignable
 from app.models import User, Job, BatchImport, Mailbox, JobState
 from app.monitor_utils import send_version_event
-from app.user_audit_log_utils import emit_user_audit_log, UserAuditLogAction
+from app.user_audit_log_utils import (
+    emit_user_audit_log,
+    emit_user_deleted_audit_log,
+    UserAuditLogAction,
+)
 from events.event_sink import HttpEventSink
 from server import create_light_app
 from tasks.delete_custom_domain_job import DeleteCustomDomainJob
@@ -275,6 +279,12 @@ def process_job(job: Job):
             render("transactional/account-delete.txt", user=user),
             render("transactional/account-delete.html", user=user),
             retries=3,
+        )
+        source = job.payload.get("source", "unknown")
+        emit_user_deleted_audit_log(
+            user=user,
+            deleted_by=f"delete-account job (marked for deletion from {source})",
+            reason=job.payload.get("reason", "unknown"),
         )
         User.delete(user.id)
         Session.commit()
