@@ -12,6 +12,8 @@ ARG TARGETARCH
 ENV PYTHONDONTWRITEBYTECODE=1
 # Turns off buffering for easier container logging
 ENV PYTHONUNBUFFERED=1
+# Precompile installed dependencies to .pyc so containers don't compile them on every start
+ENV UV_COMPILE_BYTECODE=1
 
 WORKDIR /code
 
@@ -69,6 +71,10 @@ COPY . .
 COPY --from=npm /code /code
 
 ENV PATH="/code/.venv/bin:$PATH"
+
+# Precompile application code (.venv is already compiled by uv sync)
+RUN python -m compileall -q -j 0 -x '/code/(\.venv|static)/' /code
+
 EXPOSE 7777
 
 #gunicorn wsgi:app -b 0.0.0.0:7777 -w 2 --timeout 15 --log-level DEBUG
