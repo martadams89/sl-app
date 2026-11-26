@@ -50,7 +50,8 @@ RUN \
     echo "**** install runtime packages ****" && \
     apt-get install -y \
         gnupg \
-        libre2-10 && \
+        libre2-10 \
+        swaks && \
     echo "**** cleanup ****" && \
     apt-get purge -y \
         curl \
